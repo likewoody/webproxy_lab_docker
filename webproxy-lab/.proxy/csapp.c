@@ -1028,7 +1028,6 @@ int open_listenfd(char *port)
         }
     }
 
-
     /* Clean up */
     freeaddrinfo(listp);
     if (!p) /* No address worked */
