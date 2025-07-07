@@ -31,4 +31,4 @@ handin:
 	(make clean; cd ..; tar cvf $(USER)-proxylab-handin.tar proxylab-handout --exclude tiny --exclude nop-server.py --exclude proxy --exclude driver.sh --exclude port-for-user.pl --exclude free-port.sh --exclude ".*")
 
 clean:
-	rm -f *~ *.o
+	rm -f *~ *.o echoClient echoServer
