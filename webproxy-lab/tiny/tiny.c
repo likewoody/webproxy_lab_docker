@@ -13,10 +13,9 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize, char *version);
+void serve_static(int fd, char *filename, int filesize, char *version, char *method);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs, char *version);
-void response_requesthdrs(int fd, char *buf, char *version, char *filename, int filesize);
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *version, char *method);
 
 
 int main(int argc, char **argv)
@@ -80,13 +79,13 @@ void doit(int fd)
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
 
-  sprintf(buf, "Request headers:\r\n");
-
   /* Read request line and headers */
   Rio_readinitb(&rio, fd); /* rio에 fd를 등록하고 다른 필드들을 초기화 */
   Rio_readlineb(&rio, buf, MAXLINE); /* buf에 있는 데이터를 rio에 담음 */
+
+  printf("Reqeust headers:\n");
+  printf("%s", buf);
   
-  sprintf(buf, "%s\r\n", buf); 
   /* 하나의 긴 문자열 buf를 %s %s %s 포맷 형식으로 나눈다 */
   sscanf(buf, "%s %s %s", method, uri, version); 
 
@@ -100,11 +99,11 @@ void doit(int fd)
   }
 
   /* telnet HEAD 접근할 경우 */
-  if (!strcasecmp(method, "HEAD")) {
-    response_requesthdrs(fd, buf, version, filename, sbuf.st_size);
-    return;  
-  }
-  else if (strcasecmp(method, "GET")) { /* 대소문자 상관없이 get, GET인지 비교 */
+  // if (!strcasecmp(method, "HEAD")) {
+  //   response_requesthdrs(fd, buf, version, filename, sbuf.st_size);
+  //   // return;  
+  // }
+  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) { /* 대소문자 상관없이 get, GET인지 비교 */
     /* 같을 때 0, 그러므로 같지 않을 때 에러 발생 */
     clienterror(fd, method, "501", "Not implemented",
             "Tiny does not implement this method");
@@ -124,7 +123,7 @@ void doit(int fd)
       return;
     }
     /* 파일 실행 없이 단순 전송 */
-    serve_static(fd, filename, sbuf.st_size, version);
+    serve_static(fd, filename, sbuf.st_size, version, method);
   }
   else { /* Serve dynamic content */
     /* S_IXUSR: 파일 실행 권한이 있는지 확인 */
@@ -134,7 +133,7 @@ void doit(int fd)
       return;
     }
     /* 동적 컨텐츠(CGI)를 실행해서 그 결과를 클라이언트에게 보낸다 */
-    serve_dynamic(fd, filename, cgiargs, version); 
+    serve_dynamic(fd, filename, cgiargs, version, method); 
   }
 }
 
@@ -143,7 +142,6 @@ void read_requesthdrs(rio_t *rp)
     char buf[MAXLINE]; /* 8192 크기의 버퍼 생성 */
     
     /* rp에서 한 줄 \n 문자까지 읽어 buf에 저장 */
-    Rio_readlineb(rp, buf, MAXLINE); 
     while(strcmp(buf, "\r\n")) { /* 버퍼가 \r\n 일때 */
       Rio_readlineb(rp, buf, MAXLINE); 
       printf("%s", buf);
@@ -180,7 +178,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
     }
 }
 
-void serve_static(int fd, char *filename, int filesize, char *version)
+void serve_static(int fd, char *filename, int filesize, char *version, char *method)
 {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];  
@@ -197,27 +195,29 @@ void serve_static(int fd, char *filename, int filesize, char *version)
   printf("Response headers:\n");
   printf("%s", buf);
 
-  /* Send response body to client */
-  srcfd = Open(filename, O_RDONLY, 0); /* 읽기 전용, mode = 0 (의미 없음) */
-  /* 
-    filesize: 메모리 할당 크기
-    PROT_READ: 읽기 가능
-    MAP_PRIVATE: 사적 메모리 영역 매핑
-    srcfd: 이 파일을 file descriptor로 지정
-    offset: 0
-  */ 
-  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); 
-  /*
-    11.8 mmap과 rio_readn 대신에, malloc, rio_readn, rio_writen을 사용한다.
-  */
-  srcp = malloc(filesize);
-  Rio_readn(srcfd, srcp, filesize); /* srcfd 파일에서 srcp로 데이터 읽어오기 */
-  
-  Close(srcfd);
-  Rio_writen(fd, srcp, filesize); /* scrp 데이터를 fd 클라이언트에게 전송 */
-  
-  // Munmap(srcp, filesize); /* unmap */
-  free(srcp);
+  if (!strcasecmp(method, "GET")) {
+    /* Send response body to client */
+    srcfd = Open(filename, O_RDONLY, 0); /* 읽기 전용, mode = 0 (의미 없음) */
+    /* 
+      filesize: 메모리 할당 크기
+      PROT_READ: 읽기 가능
+      MAP_PRIVATE: 사적 메모리 영역 매핑
+      srcfd: 이 파일을 file descriptor로 지정
+      offset: 0
+    */ 
+    // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); 
+    /*
+      11.8 mmap과 rio_readn 대신에, malloc, rio_readn, rio_writen을 사용한다.
+    */
+    srcp = malloc(filesize);
+    Rio_readn(srcfd, srcp, filesize); /* srcfd 파일에서 srcp로 데이터 읽어오기 */
+    
+    Close(srcfd);
+    Rio_writen(fd, srcp, filesize); /* scrp 데이터를 fd 클라이언트에게 전송 */
+    
+    // Munmap(srcp, filesize); /* unmap */
+    free(srcp);
+  }
 }
 
 /*
@@ -239,7 +239,7 @@ void get_filetype(char *filename, char *filetype)
     strcpy(filetype, "text/plain");
 }
 
-void serve_dynamic(int fd, char *filename, char *cgiargs, char *version)
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *version, char *method)
 {
   char buf[MAXLINE], *emptylist[] = { NULL }; 
 
@@ -256,17 +256,4 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *version)
     Execve(filename, emptylist, environ); /* Run CGI Program */
   }
   Wait(NULL); /* Parent waits for and reaps child */
-}
-
-void response_requesthdrs(int fd, char *buf, char *version, char *filename, int filesize) {
-  char filetype[MAXLINE];
-  get_filetype(filename, filetype);
-  
-  sprintf(buf, "%s 200 OK\r\n", version); 
-  sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
-  sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-  sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype); /* \r\n\r\n 마지막 \r\n이 헤더 종료를 나타내는 빈 줄 */
-    
-  Rio_writen(fd, buf, strlen(buf));
-  return;
 }
