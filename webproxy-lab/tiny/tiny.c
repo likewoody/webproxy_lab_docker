@@ -90,20 +90,6 @@ void doit(int fd)
   /* 하나의 긴 문자열 buf를 %s %s %s 포맷 형식으로 나눈다 */
   sscanf(buf, "%s %s %s", method, uri, version); 
 
-  /* telnet HEAD 접근할 경우 */
-  if (!strcasecmp(method, "HEAD")) {
-    response_requesthdrs(fd, buf, version, filename, sbuf.st_size);
-    return;  
-  }
-  if (strcasecmp(method, "GET")) { /* 대소문자 상관없이 get, GET인지 비교 */
-    /* 같을 때 0, 그러므로 같지 않을 때 에러 발생 */
-    clienterror(fd, method, "501", "Not implemented",
-            "Tiny does not implement this method");
-    return;
-  }
-
-  read_requesthdrs(&rio); /* Read HTTP header */
-
   /* Parser URI from GET reqeust */
   is_static = parse_uri(uri, filename, cgiargs);
   if (stat(filename, &sbuf) < 0) { /* stat() 함수가 파일 또는 디렉토리의 메타데이터 정보를 얻는 함수 */
@@ -112,6 +98,20 @@ void doit(int fd)
             "Tiny couldn't find this file");
     return;
   }
+
+  /* telnet HEAD 접근할 경우 */
+  if (!strcasecmp(method, "HEAD")) {
+    response_requesthdrs(fd, buf, version, filename, sbuf.st_size);
+    return;  
+  }
+  else if (strcasecmp(method, "GET")) { /* 대소문자 상관없이 get, GET인지 비교 */
+    /* 같을 때 0, 그러므로 같지 않을 때 에러 발생 */
+    clienterror(fd, method, "501", "Not implemented",
+            "Tiny does not implement this method");
+    return;
+  }
+
+  read_requesthdrs(&rio); /* Read HTTP header */
 
   if (is_static) { /* Serve static content */
     /* 
@@ -124,7 +124,7 @@ void doit(int fd)
       return;
     }
     /* 파일 실행 없이 단순 전송 */
-    serve_static(buf, fd, filename, sbuf.st_size);
+    serve_static(fd, filename, sbuf.st_size, version);
   }
   else { /* Serve dynamic content */
     /* S_IXUSR: 파일 실행 권한이 있는지 확인 */
@@ -268,5 +268,5 @@ void response_requesthdrs(int fd, char *buf, char *version, char *filename, int 
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype); /* \r\n\r\n 마지막 \r\n이 헤더 종료를 나타내는 빈 줄 */
     
   Rio_writen(fd, buf, strlen(buf));
-  return;   
+  return;
 }

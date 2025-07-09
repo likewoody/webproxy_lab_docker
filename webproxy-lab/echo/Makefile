@@ -10,8 +10,8 @@ LDFLAGS = -lpthread
 
 all: echoServer echoClient
 
-csapp.o: csapp.c csapp.h
-	$(CC) $(CFLAGS) -c csapp.c
+csapp.o: ../csapp.c csapp.h
+	$(CC) $(CFLAGS) -c ../csapp.c
 
 echoServer.o: echoServer.c csapp.h
 	$(CC) $(CFLAGS) -c echoServer.c 
